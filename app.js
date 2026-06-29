@@ -113,14 +113,14 @@ function home() {
   </div>`;
 
   const can = t.due + t.neu;
-  html += `<button class="btn primary" ${can ? '' : 'disabled style="opacity:.5"'} onclick="startStudy(null)">
+  html += `<button class="btn primary" ${can ? '' : 'disabled style="opacity:.5"'} data-study="">
     ${can ? '▶  Start review — alles' : 'Niets te doen — goed bezig'}</button>`;
 
   html += `<div class="section-title">Sets</div>`;
   for (const set of SETS) {
     const s = setStats(set);
     const pct = s.total ? Math.round(s.learned / s.total * 100) : 0;
-    html += `<button class="set" onclick="openSet('${set.name.replace(/'/g, "\\'")}')">
+    html += `<button class="set" data-openset="${esc(set.name)}">
       <span class="dot" style="color:${set.color}"></span>
       <span class="meta">
         <div class="nm">${esc(set.name)}</div>
@@ -148,7 +148,7 @@ function setView(set) {
     subs[sub] = (subs[sub] || 0) + 1;
   }
   let html = topbar();
-  html += `<button class="btn ghost" style="width:auto;padding:8px 4px;justify-content:flex-start" onclick="go('home')">‹ Terug</button>`;
+  html += `<button class="btn ghost" style="width:auto;padding:8px 4px;justify-content:flex-start" data-go="home">‹ Terug</button>`;
   html += `<div class="section-title"><span class="dot" style="color:${set.color};width:10px;height:10px;border-radius:50%;box-shadow:0 0 10px ${set.color}"></span> ${esc(set.name)}</div>`;
   html += `<div class="readout">
     <div class="cell due"><div class="lbl">Te herhalen</div><div class="val">${s.due}</div></div>
@@ -156,7 +156,7 @@ function setView(set) {
     <div class="cell"><div class="lbl">Gezien</div><div class="val" style="color:var(--cyan)">${pct}<span style="font-size:14px">%</span></div></div>
   </div>`;
   const can = s.due + s.neu;
-  html += `<button class="btn primary" ${can ? '' : 'disabled style="opacity:.5"'} onclick="startStudy('${set.name.replace(/'/g, "\\'")}')">
+  html += `<button class="btn primary" ${can ? '' : 'disabled style="opacity:.5"'} data-study="${esc(set.name)}">
     ${can ? '▶  Start review' : 'Alles gezien voor nu'}</button>`;
   html += `<div class="section-title">Onderdelen</div>`;
   for (const [sub, n] of Object.entries(subs).sort((a, b) => b[1] - a[1])) {
@@ -200,7 +200,7 @@ function renderCard() {
       ${c.tags && c.tags.length ? `<div class="tags">${c.tags.slice(0, 6).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
     </div>`;
   if (!session.revealed) {
-    html += `<button class="btn primary" style="margin-top:14px" onclick="reveal()">Toon antwoord</button>
+    html += `<button class="btn primary" style="margin-top:14px" data-reveal="1">Toon antwoord</button>
       <div class="hint">tik op de kaart of de knop</div>`;
   }
   html += `</div>`;
@@ -221,10 +221,10 @@ function renderAnswer() {
     g.id = 'gradeRow';
     g.className = 'reveal-wrap';
     g.innerHTML = `<div class="grades">
-      <button class="grade again" onclick="grade(0)"><div class="g">Opnieuw</div><div class="t">&lt;1 min</div></button>
-      <button class="grade hard" onclick="grade(3)"><div class="g">Lastig</div><div class="t">${ivlPreview(3)}</div></button>
-      <button class="grade good" onclick="grade(4)"><div class="g">Goed</div><div class="t">${ivlPreview(4)}</div></button>
-      <button class="grade easy" onclick="grade(5)"><div class="g">Makkelijk</div><div class="t">${ivlPreview(5)}</div></button>
+      <button class="grade again" data-grade="0"><div class="g">Opnieuw</div><div class="t">&lt;1 min</div></button>
+      <button class="grade hard" data-grade="3"><div class="g">Lastig</div><div class="t">${ivlPreview(3)}</div></button>
+      <button class="grade good" data-grade="4"><div class="g">Goed</div><div class="t">${ivlPreview(4)}</div></button>
+      <button class="grade easy" data-grade="5"><div class="g">Makkelijk</div><div class="t">${ivlPreview(5)}</div></button>
     </div>`;
     $('.study').appendChild(g);
   }
@@ -256,8 +256,8 @@ function finishSession() {
     <h3 style="margin:6px 0 2px">Sessie klaar</h3>
     <p>${session.done} kaarten herhaald${session.setName ? ' · ' + esc(session.setName) : ''}.<br>Streak: ${stats().streak} ${stats().streak === 1 ? 'dag' : 'dagen'}.</p>
   </div>
-  <button class="btn primary" onclick="${session.setName ? `openSet('${session.setName.replace(/'/g, "\\'")}')` : "go('home')"}">Verder</button>
-  <button class="btn ghost" style="margin-top:8px" onclick="go('home')">Naar overzicht</button>`;
+  <button class="btn primary" ${session.setName ? `data-openset="${esc(session.setName)}"` : `data-go="home"`}>Verder</button>
+  <button class="btn ghost" style="margin-top:8px" data-go="home">Naar overzicht</button>`;
   app.innerHTML = html;
   session = null;
 }
@@ -270,8 +270,17 @@ function render() {
   if (state.view === 'home') home();
   else if (state.view === 'set') setView(SETS.find(s => s.name === state.set));
 }
-window.go = go; window.openSet = openSet; window.startStudy = startStudy;
-window.reveal = reveal; window.grade = grade;
+// Single delegated handler — reliable on touch devices, no inline-onclick escaping
+function wireDelegation() {
+  app.addEventListener('click', (e) => {
+    const t = e.target;
+    const os = t.closest('[data-openset]'); if (os) { openSet(os.dataset.openset); return; }
+    const su = t.closest('[data-study]'); if (su) { startStudy(su.dataset.study === '' ? null : su.dataset.study); return; }
+    const gv = t.closest('[data-go]'); if (gv) { go(gv.dataset.go); return; }
+    const rv = t.closest('[data-reveal]'); if (rv) { reveal(); return; }
+    const gr = t.closest('[data-grade]'); if (gr) { grade(+gr.dataset.grade); return; }
+  });
+}
 
 /* ---------- utils ---------- */
 function esc(s) { return String(s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m])); }
@@ -284,6 +293,7 @@ function toast(msg) {
 
 /* ---------- boot ---------- */
 async function boot() {
+  wireDelegation();
   loadProg();
   const res = await fetch('cards.json');
   CARDS = await res.json();
